@@ -95,10 +95,15 @@ def send(text):
                       data={"chat_id": CHAT_ID, "text": text[i:i+4000]}, timeout=30)
 
 def main():
-    today = dt.datetime.utcnow().date().isoformat()
-    data = get("/matches", dateFrom=today, dateTo=today,
+    now = dt.datetime.utcnow()
+    today = now.date()
+    tomorrow = today + dt.timedelta(days=1)
+    data = get("/matches", dateFrom=today.isoformat(), dateTo=tomorrow.isoformat(),
                competitions=",".join(COMPETITIONS))
-    matches = data.get("matches", [])
+    start = today.isoformat() + "T00:00:00Z"
+    limit = (now + dt.timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    matches = [m for m in data.get("matches", []) if start <= m["utcDate"] < limit]
+    print("API :", len(data.get("matches", [])), "matchs reçus,", len(matches), "gardés")
     if not matches:
         send(f"📅 {today} : aucun match aujourd'hui dans tes compétitions.")
         return
