@@ -3,13 +3,13 @@ import requests
 
 API_KEY = os.environ.get("FOOTBALL_API_KEY") or os.environ.get("FOOTBALL_DATA_KEY")
 TOKEN = os.environ.get("BOT_TOKEN")
-CHAT_ID = os.environ.get("CHAT_ID")
-missing = [n for n, v in [("FOOTBALL_API_KEY", API_KEY), ("BOT_TOKEN", TOKEN), ("CHAT_ID", CHAT_ID)] if not v]
+missing = [n for n, v in [("FOOTBALL_API_KEY", API_KEY), ("BOT_TOKEN", TOKEN)] if not v]
 if missing:
     raise SystemExit("Secrets manquants dans Settings > Secrets > Actions : " + ", ".join(missing))
 
 H = {"X-Auth-Token": API_KEY}
 BASE = "https://api.football-data.org/v4"
+CHAT_FILE = "chat_id.txt"
 
 COMPETITIONS = {
     "CL": "🏆 Ligue des champions", "FL1": "🇫🇷 Ligue 1",
@@ -17,6 +17,23 @@ COMPETITIONS = {
     "PL": "🏴 Premier League", "ELC": "🏴 Championship",
     "PPL": "🇵🇹 Liga Portugal", "BSA": "🇧🇷 Brasileirão",
 }
+
+def get_chat_id():
+    if os.path.exists(CHAT_FILE):
+        v = open(CHAT_FILE).read().strip()
+        if v:
+            return v
+    r = requests.get(f"https://api.telegram.org/bot{TOKEN}/getUpdates", timeout=30).json()
+    for u in reversed(r.get("result", [])):
+        for k in ("message", "channel_post", "my_chat_member"):
+            if k in u:
+                cid = str(u[k]["chat"]["id"])
+                open(CHAT_FILE, "w").write(cid)
+                return cid
+    raise SystemExit("Chat introuvable : envoie /start à ton bot sur Telegram "
+                     "(ou écris dans ton canal où le bot est admin), puis relance.")
+
+CHAT_ID = get_chat_id()
 
 def get(path, **params):
     for _ in range(3):
