@@ -72,17 +72,27 @@ def analyse(match, stats):
         return "pas assez de données"
     xg_h = (hh["goalsFor"] / hh["playedGames"] + aa["goalsAgainst"] / aa["playedGames"]) / 2
     xg_a = (aa["goalsFor"] / aa["playedGames"] + hh["goalsAgainst"] / hh["playedGames"]) / 2
-    tot = {"1": 0.0, "N": 0.0, "2": 0.0}
-    best = {"1": (0, 1, 0), "N": (0, 0, 0), "2": (0, 0, 1)}
-    for i in range(7):
-        for j in range(7):
+    p1 = px = p2 = over = btts = 0.0
+    for i in range(9):
+        for j in range(9):
             p = poisson(i, xg_h) * poisson(j, xg_a)
-            k = "1" if i > j else ("N" if i == j else "2")
-            tot[k] += p
-            if p > best[k][0]:
-                best[k] = (p, i, j)
-    res = max(tot, key=tot.get)
-    return f"{res} | {round(xg_h + xg_a)} buts"
+            if i > j: p1 += p
+            elif i == j: px += p
+            else: p2 += p
+            if i + j > 2: over += p
+            if i > 0 and j > 0: btts += p
+    if p1 >= 0.55:
+        return "V1"
+    if p2 >= 0.55:
+        return "V2"
+    if over >= 0.60:
+        return "Plus de 2,5 buts"
+    if over <= 0.40:
+        return "Moins de 2,5 buts"
+    if btts >= 0.60:
+        return "Les deux équipes marquent"
+    dc = {"Double chance 1N": p1 + px, "Double chance N2": p2 + px, "Double chance 12": p1 + p2}
+    return max(dc, key=dc.get)
 
 def send(text):
     for i in range(0, len(text), 4000):
