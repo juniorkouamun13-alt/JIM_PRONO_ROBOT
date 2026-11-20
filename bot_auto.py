@@ -69,33 +69,55 @@ def analyse(match, stats):
         if hh["playedGames"] < 3 or aa["playedGames"] < 3:
             raise KeyError
     except KeyError:
-        return "ℹ️ Pas assez de données pour analyser."
+        return "pas assez de données"
     xg_h = (hh["goalsFor"] / hh["playedGames"] + aa["goalsAgainst"] / aa["playedGames"]) / 2
     xg_a = (aa["goalsFor"] / aa["playedGames"] + hh["goalsAgainst"] / hh["playedGames"]) / 2
-    p1 = px = p2 = over = btts = 0.0
-    for i in range(9):
-        for j in range(9):
+    tot = {"1": 0.0, "N": 0.0, "2": 0.0}
+    best = {"1": (0, 1, 0), "N": (0, 0, 0), "2": (0, 0, 1)}
+    for i in range(7):
+        for j in range(7):
             p = poisson(i, xg_h) * poisson(j, xg_a)
-            if i > j: p1 += p
-            elif i == j: px += p
-            else: p2 += p
-            if i + j > 2: over += p
-            if i > 0 and j > 0: btts += p
-    tot = p1 + px + p2
-    p1, px, p2 = p1 / tot, px / tot, p2 / tot
-    best = max((p1, "1 (domicile)"), (px, "N (nul)"), (p2, "2 (extérieur)"))[1]
-    ht, at = hs.get("TOTAL", {}), as_.get("TOTAL", {})
-    pos = f"Classement : {ht.get('position','?')}e vs {at.get('position','?')}e"
-    return (f"{pos}\n"
-            f"⚽ Buts attendus : {xg_h:.1f} - {xg_a:.1f}\n"
-            f"📊 1: {p1:.0%} | N: {px:.0%} | 2: {p2:.0%}\n"
-            f"🥅 +2,5 buts : {over:.0%} | BTTS : {btts:.0%}\n"
-            f"👉 Tendance : {best}")
+            k = "1" if i > j else ("N" if i == j else "2")
+            tot[k] += p
+            if p > best[k][0]:
+                best[k] = (p, i, j)
+    res = max(tot, key=tot.get)
+    return f"{res} ({best[res][1]}-{best[res][2]})"
 
 def send(text):
     for i in range(0, len(text), 4000):
         requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage",
                       data={"chat_id": CHAT_ID, "text": text[i:i+4000]}, timeout=30)
+
+def main():
+    now = dt.datetime.now(dt.timezone.utc)
+    today = now.date()
+    tomorrow = today + dt.timedelta(days=1)
+    data = get("/matches", dateFrom=today.isoformat(), dateTo=tomorrow.isoformat(),
+               competitions=",".join(COMPETITIONS))
+    start = today.isoformat() + "T00:00:00Z"
+    limit = (now + dt.timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    matches = [m for m in data.get("matches", []) if start <= m["utcDate"] < limit]
+    print("API :", len(data.get("matches", [])), "matchs reçus,", len(matches), "gardés")
+    if not matches:
+        send(f"📅 {today} : aucun match aujourd'hui dans tes compétitions.")
+        return
+    by_comp = {}
+    for m in matches:
+        by_comp.setdefault(m["competition"]["code"], []).append(m)
+    msg = f"📅 Pronos du {today}\n1 = domicile · N = nul · 2 = extérieur\n"
+    for code, ms in by_comp.items():
+        time.sleep(7)
+        stats = load_stats(code)
+        msg += f"\n{COMPETITIONS.get(code, code)}\n"
+        for m in ms:
+            hn = m["homeTeam"].get("shortName") or m["homeTeam"]["name"]
+            an = m["awayTeam"].get("shortName") or m["awayTeam"]["name"]
+            msg += f"{m['utcDate'][11:16]} {hn} vs {an} → {analyse(m, stats)}\n"
+    send(msg)
+
+if __name__ == "__main__":
+    main()
 
 def main():
     now = dt.datetime.utcnow()
