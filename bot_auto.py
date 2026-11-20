@@ -1,9 +1,13 @@
 import os, time, math, datetime as dt
 import requests
 
-DATA_KEY = os.environ["FOOTBALL_API_KEY"]
-TOKEN = os.environ["BOT_TOKEN"]
-CHAT_ID = os.environ["CHAT_ID"]
+API_KEY = os.environ.get("FOOTBALL_API_KEY") or os.environ.get("FOOTBALL_DATA_KEY")
+TOKEN = os.environ.get("BOT_TOKEN")
+CHAT_ID = os.environ.get("CHAT_ID")
+missing = [n for n, v in [("FOOTBALL_API_KEY", API_KEY), ("BOT_TOKEN", TOKEN), ("CHAT_ID", CHAT_ID)] if not v]
+if missing:
+    raise SystemExit("Secrets manquants dans Settings > Secrets > Actions : " + ", ".join(missing))
+
 H = {"X-Auth-Token": API_KEY}
 BASE = "https://api.football-data.org/v4"
 
