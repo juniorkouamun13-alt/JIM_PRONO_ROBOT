@@ -64,7 +64,8 @@ def analyse(match, stats):
     h, a = match["homeTeam"]["id"], match["awayTeam"]["id"]
     hs, as_ = stats.get(h, {}), stats.get(a, {})
     try:
-        hh, aa = hs["HOME"], as_["AWAY"]
+        hh = hs.get("HOME") or hs["TOTAL"]
+        aa = as_.get("AWAY") or as_["TOTAL"]
         if hh["playedGames"] < 3 or aa["playedGames"] < 3:
             raise KeyError
     except KeyError:
