@@ -82,7 +82,7 @@ def analyse(match, stats):
             if p > best[k][0]:
                 best[k] = (p, i, j)
     res = max(tot, key=tot.get)
-        return f"{res} | {round(xg_h + xg_a)} buts"
+    return f"{res} | {round(xg_h + xg_a)} buts"
 
 def send(text):
     for i in range(0, len(text), 4000):
