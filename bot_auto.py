@@ -51,8 +51,10 @@ def load_stats(code):
     stats = {}
     try:
         data = get(f"/competitions/{code}/standings")
-    except Exception:
+    except Exception as e:
+        print("ERREUR classement", code, ":", e)
         return stats
+    print("Classement", code, ":", len(data.get("standings", [])), "tableaux")
     for table in data.get("standings", []):
         for row in table["table"]:
             stats.setdefault(row["team"]["id"], {})[table["type"]] = row
