@@ -1,0 +1,26 @@
+name: robot
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: robot
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python bot_auto.py --once
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          FOOTBALL_DATA_KEY: ${{ secrets.FOOTBALL_DATA_KEY }}
+      - run: |
+          git config user.name "robot"
+          git config user.email "robot@users.noreply.github.com"
+          git add -- '*.json'
+          git diff --cached --quiet || (git commit -m "état du robot" && git push)
