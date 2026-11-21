@@ -123,41 +123,92 @@ def send(text):
                       data={"chat_id": CHAT_ID, "text": text[i:i+size] + suffix,
                             "disable_web_page_preview": True}, timeout=30)
 
-    name: Analyses foot quotidiennes
-on:
-  schedule:
-    - cron: "0 7 * * *"
-    - cron: "0 23 * * *"
-  workflow_dispatch:
-    inputs:
-      mode:
-        description: "pronos ou bilan"
-        default: "pronos"
-permissions:
-  contents: write
-jobs:
-  run:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install requests
-      - run: python bot_auto.py ${{ github.event.inputs.mode || (github.event.schedule == '0 23 * * *' && 'bilan' || 'pronos') }}
-        env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
-          FOOTBALL_DATA_KEY: ${{ secrets.FOOTBALL_DATA_KEY }}
-      - name: Mémoriser les données
-        run: |
-          git add -A
-          if ! git diff --cached --quiet; then
-            git config user.name "bot"
-            git config user.email "bot@users.noreply.github.com"
-            git commit -m "maj données"
-            git push
-          fi
+    import json
+
+PRONOS_FILE = "pronos.json"
+
+def charge():
+    try:
+        return json.load(open(PRONOS_FILE, encoding="utf-8"))
+    except Exception:
+        return []
+
+def sauve(data):
+    json.dump(data, open(PRONOS_FILE, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+
+def verifie(pick, h, a):
+    if pick == "V1": return h > a
+    if pick == "V2": return a > h
+    if pick == "Plus de 2,5 buts": return h + a > 2
+    if pick == "Moins de 2,5 buts": return h + a <= 2
+    if pick == "Les deux équipes marquent": return h > 0 and a > 0
+    if pick == "Double chance 1N": return h >= a
+    if pick == "Double chance N2": return a >= h
+    if pick == "Double chance 12": return h != a
+    return False
+
+def pronos():
+    now = dt.datetime.now(dt.timezone.utc)
+    today = now.date()
+    tomorrow = today + dt.timedelta(days=1)
+    data = get("/matches", dateFrom=today.isoformat(), dateTo=tomorrow.isoformat(),
+               competitions=",".join(COMPETITIONS))
+    start = today.isoformat() + "T00:00:00Z"
+    limit = (now + dt.timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    matches = [m for m in data.get("matches", []) if start <= m["utcDate"] < limit]
+    print("API :", len(data.get("matches", [])), "matchs reçus,", len(matches), "gardés")
+    if not matches:
+        send(f"📅 {today} : aucun match aujourd'hui dans tes compétitions.")
+        return
+    by_comp = {}
+    for m in matches:
+        by_comp.setdefault(m["competition"]["code"], []).append(m)
+    msg = f"📅 Pronos du {today}\n"
+    nouveaux = []
+    for code, ms in by_comp.items():
+        time.sleep(7)
+        stats = load_stats(code)
+        msg += f"\n{COMPETITIONS.get(code, code)}\n"
+        for m in ms:
+            hn = m["homeTeam"].get("shortName") or m["homeTeam"]["name"]
+            an = m["awayTeam"].get("shortName") or m["awayTeam"]["name"]
+            pick = analyse(m, stats)
+            msg += f"{m['utcDate'][11:16]} {hn} vs {an} → {pick}\n"
+            if pick != "pas assez de données":
+                nouveaux.append({"id": m["id"], "date": today.isoformat(),
+                                 "match": f"{hn} vs {an}", "pick": pick, "done": False})
+    send(msg)
+    garde = (today - dt.timedelta(days=3)).isoformat()
+    anciens = [p for p in charge() if p["date"] >= garde]
+    ids = {p["id"] for p in anciens}
+    sauve(anciens + [p for p in nouveaux if p["id"] not in ids])
+
+def bilan():
+    today = dt.datetime.now(dt.timezone.utc).date()
+    data = charge()
+    attente = [p for p in data if not p["done"]]
+    if not attente:
+        print("Rien à vérifier")
+        return
+    debut = min(p["date"] for p in attente)
+    res = get("/matches", dateFrom=debut,
+              dateTo=(today + dt.timedelta(days=1)).isoformat(),
+              competitions=",".join(COMPETITIONS))
+    finis = {m["id"]: m for m in res.get("matches", []) if m["status"] == "FINISHED"}
+    lignes, gagnes, total = [], 0, 0
+    for p in attente:
+        m = finis.get(p["id"])
+        if not m:
+            continue
+        h = m["score"]["fullTime"]["home"]
+        a = m["score"]["fullTime"]["away"]
+        if h is None or a is None:
+            continue
+        ok = verifie(p["pick"], h, a)
+        p["done"] = True
+        total += 1
+        gagnes += 1 if ok else 0
+        lignes.a
     send(msg)
 
 if __name__ == "__main__":
