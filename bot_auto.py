@@ -211,9 +211,6 @@ def bilan():
         lignes.a
     send(msg)
 
-if __name__ == "__main__":
-    main()
-
 def main():
     now = dt.datetime.utcnow()
     today = now.date()
