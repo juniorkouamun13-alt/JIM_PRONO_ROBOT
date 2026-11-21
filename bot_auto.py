@@ -123,31 +123,41 @@ def send(text):
                       data={"chat_id": CHAT_ID, "text": text[i:i+size] + suffix,
                             "disable_web_page_preview": True}, timeout=30)
 
-def main():
-    now = dt.datetime.now(dt.timezone.utc)
-    today = now.date()
-    tomorrow = today + dt.timedelta(days=1)
-    data = get("/matches", dateFrom=today.isoformat(), dateTo=tomorrow.isoformat(),
-               competitions=",".join(COMPETITIONS))
-    start = today.isoformat() + "T00:00:00Z"
-    limit = (now + dt.timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    matches = [m for m in data.get("matches", []) if start <= m["utcDate"] < limit]
-    print("API :", len(data.get("matches", [])), "matchs reçus,", len(matches), "gardés")
-    if not matches:
-        send(f"📅 {today} : aucun match aujourd'hui dans tes compétitions.")
-        return
-    by_comp = {}
-    for m in matches:
-        by_comp.setdefault(m["competition"]["code"], []).append(m)
-    msg = f"📅 Pronos du {today}\n1 = domicile · N = nul · 2 = extérieur\n"
-    for code, ms in by_comp.items():
-        time.sleep(7)
-        stats = load_stats(code)
-        msg += f"\n{COMPETITIONS.get(code, code)}\n"
-        for m in ms:
-            hn = m["homeTeam"].get("shortName") or m["homeTeam"]["name"]
-            an = m["awayTeam"].get("shortName") or m["awayTeam"]["name"]
-            msg += f"{m['utcDate'][11:16]} {hn} vs {an} → {analyse(m, stats)}\n"
+    name: Analyses foot quotidiennes
+on:
+  schedule:
+    - cron: "0 7 * * *"
+    - cron: "0 23 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "pronos ou bilan"
+        default: "pronos"
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - run: python bot_auto.py ${{ github.event.inputs.mode || (github.event.schedule == '0 23 * * *' && 'bilan' || 'pronos') }}
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
+          FOOTBALL_DATA_KEY: ${{ secrets.FOOTBALL_DATA_KEY }}
+      - name: Mémoriser les données
+        run: |
+          git add -A
+          if ! git diff --cached --quiet; then
+            git config user.name "bot"
+            git config user.email "bot@users.noreply.github.com"
+            git commit -m "maj données"
+            git push
+          fi
     send(msg)
 
 if __name__ == "__main__":
