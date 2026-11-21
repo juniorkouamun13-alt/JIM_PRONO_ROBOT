@@ -94,10 +94,34 @@ def analyse(match, stats):
     dc = {"Double chance 1N": p1 + px, "Double chance N2": p2 + px, "Double chance 12": p1 + p2}
     return max(dc, key=dc.get)
 
+PROMO = """🎁 Crée ton compte avec le code promo JIM55
+Offre annoncée : jusqu’à 200 % de bonus. Conditions applicables selon la plateforme.
+
+💰 Dépôt minimum : 5 000 FCFA
+❌ NB : les inscriptions sans dépôt ne marchent pas.
+👇 Liens d’inscription
+
+1xBet 👉 https://reffpa.com/L?tag=d_4185081m_97c_&site=4185081&ad=97
+
+MelBet 👉 https://refpa3665.com/L?tag=d_4455332m_2170c_&site=4455332&ad=2170&r=registration?type=email&bonus=SPORT
+
+WinWin Bet 👉 https://refpa49781.com/L?tag=d_5389295m_64433c_&site=5389295&ad=64433
+
+📝 Comment faire
+Appuie sur le lien de ta plateforme.
+Crée ton compte.
+Entre le code JIM55 dans la case « code promo ».
+Fais un premier dépôt d’au moins 5 000 FCFA.
+
+🔞 18+ · Aucun gain garanti  Vérifie que c’est autorisé dans ton pays."""
+
 def send(text):
-    for i in range(0, len(text), 4000):
+    suffix = "\n" + "─" * 12 + "\n" + PROMO
+    size = 4000 - len(suffix)
+    for i in range(0, len(text), size):
         requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-                      data={"chat_id": CHAT_ID, "text": text[i:i+4000]}, timeout=30)
+                      data={"chat_id": CHAT_ID, "text": text[i:i+size] + suffix,
+                            "disable_web_page_preview": True}, timeout=30)
 
 def main():
     now = dt.datetime.now(dt.timezone.utc)
