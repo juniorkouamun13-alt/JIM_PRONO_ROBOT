@@ -1,4 +1,5 @@
-"""Envoie le coupon du jour et les pronostics (fichier pronos.md) sur un groupe Telegram."""
+"""Envoie sur Telegram UN SEUL pronostic par match (le meilleur choix du robot).
+Lit le fichier pronos.md produit par le robot d'analyse."""
 import os
 import re
 import sys
@@ -11,8 +12,16 @@ CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 if not TOKEN or not CHAT_ID:
     sys.exit("TELEGRAM_BOT_TOKEN ou TELEGRAM_CHAT_ID manquant (ajoute-les dans les Secrets du dépôt)")
 
-SEUIL = 0.60      # un pari n'entre dans le coupon que s'il dépasse ce seuil
-NB_MAX = 5        # nombre maximum de paris dans le coupon
+SEUIL_PARI = 0.58     # en dessous, le robot ne conseille aucun pari sur ce match
+SEUIL_COUPON = 0.62   # seuls les paris très probables entrent dans le coupon
+NB_COUPON = 5
+
+# Poids par type de pari : les paris à petite cote (double chance) ou aux stats
+# très variables (fautes, cartons) sont moins intéressants à probabilité égale.
+POIDS = {"victoire": 1.0, "buts": 1.0, "btts": 0.97, "tirs": 0.95,
+         "corners": 0.95, "double": 0.85, "fautes": 0.88, "cartons": 0.88}
+STATS = {"Tirs cadrés": ("tirs", "tirs cadrés"), "Corners": ("corners", "corners"),
+         "Fautes": ("fautes", "fautes"), "Cartons jaunes": ("cartons", "cartons jaunes")}
 
 
 def envoyer(texte):
@@ -42,21 +51,46 @@ def lire_matchs(texte):
 
 
 def meilleur_pari(match):
-    """Le pari le plus probable parmi : victoire dom., victoire ext., +2,5 buts, 2 équipes marquent."""
+    """Choisit UN pari : le plus probable, après pondération. Renvoie (proba, libellé) ou None."""
     texte = "\n".join(match["details"])
     dom, _, ext = match["nom"].partition(" - ")
-    options = []
+    options = []  # (score, proba, libellé)
+
+    def ajouter(proba, libelle, type_pari):
+        options.append((proba * POIDS[type_pari], proba, libelle))
+
     m = re.search(r"1: (\d+)% \| N: (\d+)% \| 2: (\d+)%", texte)
     if m:
-        options.append((int(m.group(1)) / 100, f"Victoire {dom}"))
-        options.append((int(m.group(3)) / 100, f"Victoire {ext}"))
-    m = re.search(r"\+2,5 : (\d+)%", texte)
+        p1, pn, p2 = (int(x) / 100 for x in m.groups())
+        ajouter(p1, f"Victoire {dom}", "victoire")
+        ajouter(p2, f"Victoire {ext}", "victoire")
+        ajouter(p1 + pn, f"{dom} ou match nul", "double")
+        ajouter(pn + p2, f"{ext} ou match nul", "double")
+    m = re.search(r"\+2,5 : (\d+)% \| 2 marquent : (\d+)%", texte)
     if m:
-        options.append((int(m.group(1)) / 100, "Plus de 2,5 buts"))
-    m = re.search(r"2 marquent : (\d+)%", texte)
-    if m:
-        options.append((int(m.group(1)) / 100, "Les 2 équipes marquent"))
-    return max(options) if options else None
+        over, btts = int(m.group(1)) / 100, int(m.group(2)) / 100
+        ajouter(over, "Plus de 2,5 buts", "buts")
+        ajouter(1 - over, "Moins de 2,5 buts", "buts")
+        ajouter(btts, "Les 2 équipes marquent", "btts")
+        ajouter(1 - btts, "Les 2 équipes ne marquent pas", "btts")
+    for ligne in match["details"]:
+        m = re.match(r"(Tirs cadrés|Corners|Fautes|Cartons jaunes) : .*\| \+(\d+,5) : (\d+)%", ligne)
+        if m:
+            type_pari, nom = STATS[m.group(1)]
+            p = int(m.group(3)) / 100
+            ajouter(p, f"Plus de {m.group(2)} {nom}", type_pari)
+            ajouter(1 - p, f"Moins de {m.group(2)} {nom}", type_pari)
+    if not options:
+        return None
+    _, proba, libelle = max(options)
+    return proba, libelle
+
+
+def fiabilite(match):
+    for d in match["details"]:
+        if d.startswith("Tendance"):
+            return d.split("fiabilité :")[-1].strip()
+    return ""
 
 
 def main():
@@ -69,30 +103,35 @@ def main():
         envoyer(f"⚽ Pronostics du {date}\n\nAucun match aujourd'hui.")
         return
 
-    # 1) Le coupon
-    choix = []
     for m in matchs:
-        p = meilleur_pari(m)
-        if p and p[0] >= SEUIL:
-            choix.append((p[0], p[1], m))
-    choix.sort(key=lambda x: x[0], reverse=True)
+        m["pari"] = meilleur_pari(m)
+
+    # 1) Le coupon : les paris les plus sûrs du jour (1 par match)
+    sûrs = [m for m in matchs if m["pari"] and m["pari"][0] >= SEUIL_COUPON
+            and not fiabilite(m).startswith("faible")]
+    sûrs.sort(key=lambda m: m["pari"][0], reverse=True)
     coupon = [f"🎟️ COUPON DU JOUR - {date}\n"]
-    if choix:
-        for i, (proba, pari, m) in enumerate(choix[:NB_MAX], 1):
-            coupon.append(f"{i}. {m['nom']} ({m['comp']}, {m['heure']})\n   ➜ {pari} : {proba:.0%}\n")
+    if sûrs:
+        for i, m in enumerate(sûrs[:NB_COUPON], 1):
+            coupon.append(f"{i}. {m['nom']} ({m['heure']})\n   ➜ {m['pari'][1]} ({m['pari'][0]:.0%})\n")
     else:
         coupon.append("Aucun pari assez solide aujourd'hui, mieux vaut s'abstenir.\n")
     coupon.append("⚠️ Estimations statistiques, aucune garantie. Joue avec modération.")
     envoyer("\n".join(coupon))
 
-    # 2) Le détail de chaque compétition
+    # 2) Un pronostic par match, par compétition
     par_comp = {}
     for m in matchs:
         par_comp.setdefault(m["comp"], []).append(m)
     for comp, liste in par_comp.items():
         morceau = f"⚽ {comp}\n"
         for m in liste:
-            bloc = f"\n{m['nom']} ({m['heure']})\n" + "\n".join(f"• {d}" for d in m["details"]) + "\n"
+            if m["pari"] and m["pari"][0] >= SEUIL_PARI:
+                ligne = f"➜ {m['pari'][1]} ({m['pari'][0]:.0%})"
+            else:
+                ligne = "➜ Pas de pari conseillé (match trop incertain)"
+            fi = fiabilite(m)
+            bloc = f"\n{m['nom']} ({m['heure']})\n{ligne}\n" + (f"Fiabilité : {fi}\n" if fi else "")
             if len(morceau) + len(bloc) > 3800:
                 envoyer(morceau)
                 morceau = f"⚽ {comp} (suite)\n"
