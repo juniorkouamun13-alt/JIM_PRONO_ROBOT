@@ -1,20 +1,35 @@
 name: Analyses foot quotidiennes
+
 on:
   schedule:
-    - cron: "0 7 * * *"
+    - cron: "0 6 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: write
+
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - run: pip install requests
-      - run: python bot_auto.py
+
+      - name: Lancer le robot
         env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.CHAT_ID }}
-          FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
-          FOOTBALL_DATA_KEY: ${{ secrets.FOOTBALL_DATA_KEY }}
+          FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
+        run: python bot_auto.py
+
+      - name: Enregistrer les pronostics
+        run: |
+          git config user.name "robot"
+          git config user.email "robot@users.noreply.github.com"
+          git add pronos.md
+          git commit -m "Pronostics du jour" || echo "Rien à enregistrer"
+          git push
