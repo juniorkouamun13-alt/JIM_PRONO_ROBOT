@@ -13,11 +13,11 @@
   - Tendance : Victoire domicile | fiabilité : indicative (buts seulement)
 - **FC Internazionale Milano - VfB Stuttgart** (20:00 UTC)
   - 1: 43% | N: 23% | 2: 34%
-  - Buts : 1.7 - 1.5 | score probable : 1-1 | +2,5 : 64% | 2 marquent : 65%
+  - Buts : 1.7 - 1.5 | score probable : 1-1 | +2,5 : 63% | 2 marquent : 64%
   - Tendance : Domicile ou nul (1N) | fiabilité : indicative (buts seulement)
 - **Club Atlético de Madrid - Viking FK** (20:00 UTC)
   - 1: 45% | N: 22% | 2: 33%
-  - Buts : 1.9 - 1.6 | score probable : 1-1 | +2,5 : 69% | 2 marquent : 68%
+  - Buts : 1.9 - 1.6 | score probable : 1-1 | +2,5 : 68% | 2 marquent : 68%
   - Tendance : Domicile ou nul (1N) | fiabilité : indicative (buts seulement)
 - **Paris Saint-Germain FC - AS Roma** (20:00 UTC)
   - 1: 74% | N: 12% | 2: 13%
